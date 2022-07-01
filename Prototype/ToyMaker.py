@@ -5,10 +5,18 @@ import pandas as pd
 import os
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import ThreadPoolExecutor
+import scipy as sp
 from tqdm import tqdm
 import copy
 
-# Author: Sergio Andrés Pachón Dotor
+# ___________________________________________ 
+# 
+# Code Wrtitten By Sergio Andrés Pachón Dotor
+# 2022
+# e-mail: sap9827@gmail.com
+# 
+# ___________________________________________
+#
 # Inspired in specific Gillespie from: https://github.com/jdmarmolejo/Propagation-of-Noise-in-Feedback-Gene-Networks/blob/main/X%20bloquea%20a%20Y%20y%20Y%20activa%20a%20X/ABloquea%20BActiva.ipynb
 # Multiprocessing solution taken from: https://analyticsindiamag.com/run-python-code-in-parallel-using-multiprocessing/
 
@@ -141,7 +149,7 @@ def calculate_tau_for_division(p, mu, size):
     return (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size)))
 
 
-def calculate_propensities(propensities, species, reactions_species_index, mode='classic'):
+def calculate_propensities(propensities, species, reactions_species_index):
     """ 
     Calculates the propensity of each reaction
     Args:
@@ -157,12 +165,11 @@ def calculate_propensities(propensities, species, reactions_species_index, mode=
     return τarr
 
 
-def calculate_propensities_for_division(propensities, species, reactions_species_index, mu, size):
-        species_values = [species[reactions_species_index[i]] for i in range(len(reactions_species_index))]
-        pt = [propensities[i](*species_values[i]) for i in range(len(propensities))]
-        τarr = [calculate_tau_for_division(p, mu, size) if p > 0 else np.inf for p in pt]
-        return τarr 
-
+def calculate_propensities_for_division(propensities, species, reactions_species_index, mu, size, division_index):
+    species_values = [species[reactions_species_index[i]] for i in range(len(reactions_species_index))]
+    pt = [propensities[i](*species_values[i]) for i in range(len(propensities))]
+    τarr = [calculate_tau_for_division(p, mu, size) if p > 0 else np.inf for p in pt]
+    return τarr 
 
 # system, propensities, species, species_index
 def solve_deterministic_model(system, species, species_index, system_idx):
@@ -188,45 +195,12 @@ def update_size(mu:float, time:float, tmax:float) -> float:
     return np.exp(mu * (tmax - time))
 
 
-def birth_size() -> float:
-    return np.random.normal(loc=1.0, scale=0.1)
+def birth_size(size=1.0) -> float:
+    return np.random.normal(loc=size, scale=0.1)
 
 
 def dilute(species, reaction_type, division_index):
-    return [float(np.random.binomial(species[i], 0.5)) if reaction_type[division_index][i] == 2. else species[i] for i in range(len(species))]
-
-
-def Gillespie(species, tmax, reaction_type, propensities, system, species_index, reactions_species_index, system_idx, deterministic):
-    while species[0] < tmax:
-        τarr = calculate_propensities(propensities, species, reactions_species_index)
-        τ,  q = minimal_value(τarr)
-        species = species + reaction_type[q]
-        species[0] = species[0] + τ
-    return species
-
-
-def Gillespie_for_division(species, tmax, reaction_type, propensities, reactions_species_index, mu, division_time, division_index, life_time):
-    # Get index of dilution reaction for species dilution
-    # reference_time = tmax
-    τ = 0.0
-    while species[0] < tmax:
-        
-        τarr = calculate_propensities_for_division(propensities, species, reactions_species_index, mu, species[2])
-        τ,  q = minimal_value(τarr)
-
-        if division_time > τ:
-            species += reaction_type[q]
-            species[2] *= np.exp(mu * τ)
-            division_time -= τ
-            species[0] += τ
-
-        elif division_time < τ:
-            species[2] /= 2
-            species = dilute(species, reaction_type, division_index)
-            division_time = time_to_division(mu, species[2])
-            species[0] += τ
-
-    return species, τ, division_time
+    return np.array([float(np.random.binomial(species[i], 0.5)) if reaction_type[division_index][i] == 2. else species[i] for i in range(len(species))])
 
 
 def Cell(species, reactions, tmax, sampling_time, cell=1, deterministic=False):
@@ -249,17 +223,25 @@ def Cell(species, reactions, tmax, sampling_time, cell=1, deterministic=False):
 
     for i in range(1,len(tarr)):
         sim[i] = Gillespie(sim[i - 1], tarr[i], reaction_type, propensities, system, species_index, reactions_species_index, system_idx, deterministic)
-        sim[i][0] = round(sim[i][0], 5)
+        # sim[i][0] = round(sim[i][0], 5)
         sim[i][1] = cell
         
     return sim
-     
 
-def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:float=0.1, cell=1, division_time=18):
+
+def Gillespie(species, tmax, reaction_type, propensities, system, species_index, reactions_species_index, system_idx, deterministic):
+    while species[0] < tmax:
+        τarr = calculate_propensities(propensities, species, reactions_species_index)
+        τ,  q = minimal_value(τarr)
+        species = species + reaction_type[q]
+        species[0] = species[0] + τ
+    return species
+
+
+def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:float=0.1, cell=1, division=18):
     # Size params setup
 
-    mu = np.log(2)/division_time
-    life_time = 0.0
+    mu = np.log(2)/division
 
     species_names = get_species_names(species)
     division_index = get_species_names(reactions).index('division')
@@ -280,16 +262,41 @@ def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:floa
 
     for i in range(1,len(tarr)):
         
-        sim[i], τ, division_time = Gillespie_for_division(sim[i - 1], tarr[i], reaction_type, propensities, reactions_species_index, mu, division_time, division_index, life_time)
-        division_time -= sampling_time
-        sim[i][2] *= np.exp(mu * sampling_time)
-
-        sim[i][0] = round(sim[i][0], 5)
+        sim[i], time, division_time = Gillespie_for_division(sim[i - 1], tarr[i], reaction_type, propensities, reactions_species_index, mu, division_time, division_index)
+        division_time -= time
+        sim[i][2] *= np.exp(mu * time)
         sim[i][1] = cell
 
     return sim
 
 
+def Gillespie_for_division(species, tmax, reaction_type, propensities, reactions_species_index, mu, division_time, division_index):
+    # Get index of dilution reaction for species dilution
+    # reference_time = tmax
+    time = 0.0
+    while species[0] < tmax:
+
+        τarr = calculate_propensities_for_division(propensities, species, reactions_species_index, mu, species[2], division_index)
+        τ,  q = minimal_value(τarr)
+
+        if division_time > τ:
+            species += reaction_type[q]
+            species[2] *= np.exp(mu * τ)
+            division_time -= τ
+            
+        elif division_time < τ:
+            species[2] /= 2
+            species = dilute(species, reaction_type, division_index)
+            division_time = time_to_division(mu, species[2])
+            # print(f'Divided at time:  {species[0]}\nSize: {species[2]}')
+
+        time = tmax - species[0]
+        species[0] += τ
+        
+    return species, time, division_time
+
+
+# Multiple Cells Simulation Types
 def multiple_Cells(species, reactions, tmax, sampling_time, cells=10, deterministic=False, file_name='test.csv'):
     
     set_local_to_save(file_name, species)
@@ -297,7 +304,7 @@ def multiple_Cells(species, reactions, tmax, sampling_time, cells=10, determinis
         cell = []
         cell = Cell(species, reactions, tmax, sampling_time, cell=c, deterministic=deterministic)
         simple_save(cell, file_name=file_name)
-    # cells = [Cell(species, reactions, tmax, sampling_time, cell=c, deterministic=deterministic) for c in tqdm(range(cells))]s
+    # cells = [Cell(species, reactions, tmax, sampling_time, cell=c, deterministic=deterministic) for c in tqdm(range(cells))]
     
 
 def multiple_cells_by_batch(species, reactions, tmax, sampling_time, samples=10, deterministic=False, batch_size=10, file_name='Toy_model'):
@@ -378,58 +385,30 @@ def simple_save(cell,file_name):
         
         
 if __name__ == '__main__':
+    
+    def k_r():
+        return 2
 
-    # Propensities
-    def gamma_r(): return 1/5
-    def gamma_p() : return 1/20
-    def gamma_z() : return 1/20
-
-    def kz() : return 3.2 * 1/20
-    def kr() : return 1
-    def kp() : return 50
-
-    # Species
-
-    def z(z): 
-        return kz - gamma_z * z 
-
-    def r(z, r):
-        return kr * z * (gamma_z/kz) - gamma_r * r
-
-    def p(r, p):
-        return kp * r - gamma_p * p
-
-    # Model Deffinition
+    def gamma_r():
+        return 1/10
 
     species = {
                 't':    0., 
                 'cell': 0,
                 'size': birth_size(),
-                z: 0.,
-                r: 0.,
-                p: 0.,            
-                }
-
+                'Xr': 0.,
+    }
     reactions = {
-                kz: {'create':    ['z']},
-                kr: {'create':    ['r']},
-                kp: {'create':    ['p']},
-                'division': {'dilute' : ['z', 'p', 'r']},
-                gamma_z : {'destroy':   ['z']},
-                gamma_r : {'destroy':   ['r']},
-                gamma_p : {'destroy':   ['p']},
-                
+
+        k_r: {'create': ['Xr']},
+        gamma_r:{'destroy': ['Xr']},
+        'division': {'dilute': ['Xr']}
+
     }
 
-    import matplotlib.pyplot as plt
-    tmax = 500
-    sampling_time = 0.1
-    samples = 10
-    cell = 1
-    mu = np.log(2)/18
-    # cells = multiple_Cells(species, reactions, tmax, sampling_time, cells=10, deterministic=False, file_name='./simulations/Tactic_model')
-    sim = Simulate_Division(species, reactions, tmax, sampling_time, cell)
-    plt.plot(sim[::][0], sim[::][3])
-    plt.savefig('test.jpg')
 
-    # multiple_Cells(species, reactions, tmax, sampling_time, samples=samples, batch_size=100, file_name='./simulations/Tactic_model')
+    tmax = 30
+    sampling_time = 1
+    cell = 1
+    sim = Simulate_Division(species, reactions, tmax, sampling_time, cell, division=18.)
+    # cell_sim = Cell(species, reactions, tmax, sampling_time, cell=1, deterministic=False)
