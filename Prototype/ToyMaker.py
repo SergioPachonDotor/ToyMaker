@@ -1,14 +1,10 @@
-from ast import Break
+from copy import deepcopy, copy
 import numpy as np
 import warnings
 import pandas as pd
 import os
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import ThreadPoolExecutor
-import scipy as sp
 from tqdm import tqdm
-import copy
-
 # ___________________________________________ 
 # 
 # Code Wrtitten By Sergio Andrés Pachón Dotor
@@ -97,7 +93,7 @@ def change_matrix(reaction_model, species) -> np.array:
                 reactions[row][column] = 100.
 
             elif 'dilute' in reaction_type[row].keys() and species[column] in reaction_type[row]['dilute']:
-                reactions[row][column] = 2.
+                reactions[row][column] = 5
     
     return reactions
 
@@ -146,7 +142,7 @@ def calculate_tau(p):
 
 
 def calculate_tau_for_division(p, mu, size):
-    return (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size)))
+    return (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size))) if p > 0 else np.inf
 
 
 def calculate_propensities(propensities, species, reactions_species_index):
@@ -199,8 +195,11 @@ def birth_size(size=1.0) -> float:
     return np.random.normal(loc=size, scale=0.1)
 
 
-def dilute(species, reaction_type, division_index):
-    return np.array([float(np.random.binomial(species[i], 0.5)) if reaction_type[division_index][i] == 2. else species[i] for i in range(len(species))])
+def segregate(species, reaction_type, division_index):
+    """Segregation"""
+    species = copy(species)
+    species = [np.random.binomial(species[i], 0.5) if reaction_type[division_index][i] == 5 else species[i] for i in range(len(species))]
+    return np.array(species, dtype=np.float64)
 
 
 def Cell(species, reactions, tmax, sampling_time, cell=1, deterministic=False):
@@ -223,7 +222,6 @@ def Cell(species, reactions, tmax, sampling_time, cell=1, deterministic=False):
 
     for i in range(1,len(tarr)):
         sim[i] = Gillespie(sim[i - 1], tarr[i], reaction_type, propensities, system, species_index, reactions_species_index, system_idx, deterministic)
-        # sim[i][0] = round(sim[i][0], 5)
         sim[i][1] = cell
         
     return sim
@@ -238,10 +236,10 @@ def Gillespie(species, tmax, reaction_type, propensities, system, species_index,
     return species
 
 
-def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:float=0.1, cell=1, division=18):
+def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:float=0.1, cell=1, doubling_time=18):
     # Size params setup
 
-    mu = np.log(2)/division
+    mu = np.log(2)/doubling_time
 
     species_names = get_species_names(species)
     division_index = get_species_names(reactions).index('division')
@@ -255,45 +253,51 @@ def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:floa
 
     reactions_species_index = get_index(species_names, propensities_parameters, propensities)
 
-    tarr = np.arange(0, tmax , sampling_time ,dtype=float) 
+    tarr = np.arange(0., tmax , sampling_time ,dtype=float)
     sim = setup_division_sim(tarr, species, cell)
 
     division_time = time_to_division(mu, sim[0][2])
 
     for i in range(1,len(tarr)):
         
-        sim[i], time, division_time = Gillespie_for_division(sim[i - 1], tarr[i], reaction_type, propensities, reactions_species_index, mu, division_time, division_index)
-        division_time -= time
-        sim[i][2] *= np.exp(mu * time)
+        sim[i], division_time = Gillespie_for_division(sim[i - 1], tarr[i], reaction_type, propensities, reactions_species_index, mu, division_time, division_index)
         sim[i][1] = cell
-
     return sim
 
 
 def Gillespie_for_division(species, tmax, reaction_type, propensities, reactions_species_index, mu, division_time, division_index):
-    # Get index of dilution reaction for species dilution
-    # reference_time = tmax
-    time = 0.0
-    while species[0] < tmax:
-
+    time = 0.
+    τ = 0.
+    while species[0] + τ < tmax:
+        # τarr = calculate_propensities(propensities, species, reactions_species_index)
         τarr = calculate_propensities_for_division(propensities, species, reactions_species_index, mu, species[2], division_index)
         τ,  q = minimal_value(τarr)
 
         if division_time > τ:
             species += reaction_type[q]
             species[2] *= np.exp(mu * τ)
-            division_time -= τ
-            
-        elif division_time < τ:
-            species[2] /= 2
-            species = dilute(species, reaction_type, division_index)
-            division_time = time_to_division(mu, species[2])
-            # print(f'Divided at time:  {species[0]}\nSize: {species[2]}')
 
-        time = tmax - species[0]
-        species[0] += τ
-        
-    return species, time, division_time
+            species[0] = (species[0] + τ) if (species[0] + τ) < tmax else species[0]
+            division_time -= τ          
+
+        elif division_time < τ:
+
+            species = segregate(species, reaction_type, division_index)
+
+            species[2] = species[2] / 2.
+            birth_s = deepcopy(species[2])
+            
+            species[2] *= np.exp(mu * division_time)
+
+            species[0] = (species[0] + division_time) if (species[0] + division_time) < tmax else species[0]
+            division_time = time_to_division(mu, birth_s)       
+                 
+    time = tmax - species[0]
+    species[0] = tmax
+    division_time -= time
+    species[2] *= np.exp(mu * time)
+
+    return species, division_time
 
 
 # Multiple Cells Simulation Types
@@ -335,6 +339,11 @@ def get_mean_per_cell(cells=[], samples=100, tmax=100, species_idx=2, single_val
     elif single_value == True:
         mean = np.array([np.mean([cells[sample][time:time + 1, species_idx] for sample in range(samples)]) for time in range(tmax)])
         return mean[-100:].mean()
+
+
+def get_mean_per_cell_division(cells=[], samples=100, tmax=100, species_idx=3, size_idx=2):
+    mean = np.array([np.mean([cells[sample][time:time + 1, species_idx]/cells[sample][time:time + 1, size_idx] for sample in range(samples)]) for time in range(tmax)])
+    return mean
 
 
 def get_variance_per_cell(cells=[], samples=100, tmax=100, species_idx=2, single_value=False):
@@ -406,9 +415,9 @@ if __name__ == '__main__':
 
     }
 
-
-    tmax = 30
+    tmax = 10000
     sampling_time = 1
     cell = 1
-    sim = Simulate_Division(species, reactions, tmax, sampling_time, cell, division=18.)
+    print(Simulate_Division(species, reactions, tmax, sampling_time, cell, doubling_time=18.))
+    # [print(sim[i][0]) for i in range(len(sim))];
     # cell_sim = Cell(species, reactions, tmax, sampling_time, cell=1, deterministic=False)
