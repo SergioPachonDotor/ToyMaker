@@ -1,3 +1,4 @@
+from __future__ import division
 from copy import deepcopy, copy
 import numpy as np
 import warnings
@@ -128,21 +129,23 @@ def minimal_value(array):
     Choose the lowest propensity value and returns the 
     tau value and the q value.
     """
-    τ = array[0]
-    q = 0
+    x = array[0]
+    indx = 0
     for i in range(1,len(array)):
-        if array[i] < τ:
-            τ = array[i]
-            q = i
-    return τ,  q
+        if array[i] < x:
+            x = array[i]
+            indx = i
+    return x,  indx
 
 
 def calculate_tau(p):
-    return -(1/p) * np.log(np.random.rand()) if p > 0 else np.inf
+    return -(1/p) * np.log(np.random.rand()) if p > 0. else np.inf
 
 
 def calculate_tau_for_division(p, mu, size):
-    return (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size))) if p > 0 else np.inf
+    # (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size))) if p > 0. else np.inf
+    # (1/mu) * np.log(1 - (mu/ (p * size) * np.log(np.random.rand()))) if p > 0. else np.inf
+    return (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size))) if p > 0. else np.inf
 
 
 def calculate_propensities(propensities, species, reactions_species_index):
@@ -195,10 +198,23 @@ def birth_size(size=1.0) -> float:
     return np.random.normal(loc=size, scale=0.1)
 
 
+def grow(mu, time, size):
+    """
+
+    """
+    return size * np.exp(mu * time)
+
+
+def divide(size):
+    return size / 2.
+
+
 def segregate(species, reaction_type, division_index):
     """Segregation"""
+
     species = copy(species)
-    species = [np.random.binomial(species[i], 0.5) if reaction_type[division_index][i] == 5 else species[i] for i in range(len(species))]
+    species = [0. if species[i] < 0. else species[i] for i in range(len(species))]
+    species = [np.random.binomial(species[i] if species[i] >= 0. else 0., 0.5) if reaction_type[division_index][i] == 5 else species[i] for i in range(len(species))]
     return np.array(species, dtype=np.float64)
 
 
@@ -253,49 +269,52 @@ def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:floa
 
     reactions_species_index = get_index(species_names, propensities_parameters, propensities)
 
-    tarr = np.arange(0., tmax , sampling_time ,dtype=float)
+    tarr = np.arange(0., tmax , sampling_time ,dtype=np.float64)
     sim = setup_division_sim(tarr, species, cell)
 
     division_time = time_to_division(mu, sim[0][2])
 
     for i in range(1,len(tarr)):
         
-        sim[i], division_time = Gillespie_for_division(sim[i - 1], tarr[i], reaction_type, propensities, reactions_species_index, mu, division_time, division_index)
+        sim[i], division_time = Gillespie_for_division(sim[i - 1], tarr[i], reaction_type, propensities, reactions_species_index, mu, division_time, division_index,sampling_time)
         sim[i][1] = cell
     return sim
 
 
-def Gillespie_for_division(species, tmax, reaction_type, propensities, reactions_species_index, mu, division_time, division_index):
+def Gillespie_for_division(species, reference_time, reaction_type, propensities, reactions_species_index, mu, division_time, division_index, sampling_time):
     time = 0.
     τ = 0.
-    while species[0] + τ < tmax:
+    birth_s = species[2]
+    while species[0] + τ < reference_time:
+
         # τarr = calculate_propensities(propensities, species, reactions_species_index)
+        
         τarr = calculate_propensities_for_division(propensities, species, reactions_species_index, mu, species[2], division_index)
         τ,  q = minimal_value(τarr)
 
         if division_time > τ:
             species += reaction_type[q]
-            species[2] *= np.exp(mu * τ)
-
-            species[0] = (species[0] + τ) if (species[0] + τ) < tmax else species[0]
-            division_time -= τ          
+            
+            species[0] = (species[0] + τ) if (species[0] + τ) < reference_time else species[0]
+            species[2] = grow(mu, τ, species[2])
+            division_time -= τ
 
         elif division_time < τ:
-
             species = segregate(species, reaction_type, division_index)
 
-            species[2] = species[2] / 2.
+            species[2] = divide(species[2])
+            species[2] = grow(mu, division_time, species[2])
             birth_s = deepcopy(species[2])
-            
-            species[2] *= np.exp(mu * division_time)
 
-            species[0] = (species[0] + division_time) if (species[0] + division_time) < tmax else species[0]
-            division_time = time_to_division(mu, birth_s)       
-                 
-    time = tmax - species[0]
-    species[0] = tmax
-    division_time -= time
-    species[2] *= np.exp(mu * time)
+            species[0] = (species[0] + division_time) if (species[0] + division_time) < reference_time else species[0]
+            
+            division_time = time_to_division(mu, birth_s)
+
+    time = reference_time - species[0]
+    species[2] = grow(mu, τ, species[2])
+    division_time = (division_time - time) if (division_time - time) > 0. else 0.
+    species[0] = reference_time
+    
 
     return species, division_time
 
@@ -341,9 +360,14 @@ def get_mean_per_cell(cells=[], samples=100, tmax=100, species_idx=2, single_val
         return mean[-100:].mean()
 
 
-def get_mean_per_cell_division(cells=[], samples=100, tmax=100, species_idx=3, size_idx=2):
-    mean = np.array([np.mean([cells[sample][time:time + 1, species_idx]/cells[sample][time:time + 1, size_idx] for sample in range(samples)]) for time in range(tmax)])
-    return mean
+def get_mean_per_cell_division(cells=[], samples=100, tmax=100, species_idx=3, size_idx=2, single_value=False):
+
+    if single_value == False:
+        mean = np.array([np.mean([cells[sample][time:time + 1, species_idx]/cells[sample][time:time + 1, size_idx] for sample in range(samples)]) for time in range(tmax)])
+        return mean
+    elif single_value == True:
+        mean = np.array([np.mean([cells[sample][time:time + 1, species_idx]/cells[sample][time:time + 1, size_idx] for sample in range(samples)]) for time in range(tmax)])
+        return mean[-100:].mean() 
 
 
 def get_variance_per_cell(cells=[], samples=100, tmax=100, species_idx=2, single_value=False):
@@ -398,8 +422,8 @@ if __name__ == '__main__':
     def k_r():
         return 2
 
-    def gamma_r():
-        return 1/10
+    def gamma_r(Xr):
+        return (1/10)*Xr
 
     species = {
                 't':    0., 
@@ -415,9 +439,9 @@ if __name__ == '__main__':
 
     }
 
-    tmax = 10000
-    sampling_time = 1
+    tmax = 40
+    sampling_time = 0.01
     cell = 1
-    print(Simulate_Division(species, reactions, tmax, sampling_time, cell, doubling_time=18.))
+    sim = Simulate_Division(species, reactions, tmax, sampling_time, cell, doubling_time=18.)
     # [print(sim[i][0]) for i in range(len(sim))];
     # cell_sim = Cell(species, reactions, tmax, sampling_time, cell=1, deterministic=False)
