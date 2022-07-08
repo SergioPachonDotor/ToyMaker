@@ -1,5 +1,3 @@
-from __future__ import division
-from copy import deepcopy, copy
 import numpy as np
 import warnings
 import pandas as pd
@@ -18,6 +16,8 @@ from tqdm import tqdm
 # Multiprocessing solution taken from: https://analyticsindiamag.com/run-python-code-in-parallel-using-multiprocessing/
 
 def get_funct_get_pams(fun_dict):
+    function_arr = np.zeros(len(fun_dict))
+    
     fun_dict = dict(enumerate(fun_dict.keys())).items()
     function_arr = [fun for idx, fun in fun_dict if type(fun) != str]
     function_idx = [idx for idx, fun in fun_dict if type(fun) != str]
@@ -66,7 +66,7 @@ def change_matrix(reaction_model, species) -> np.array:
                         gamma_z : {'destroy':   ['z']},
                         gamma_r : {'destroy':   ['r']},
                         gamma_p : {'destroy':   ['p']},
-                        division: {'divide' : ['z', 'p', 'r']}
+                        division: {'segregate' : ['z', 'p', 'r']}
                         }
 
            [[ 0.  0.  0.  1.  0.  0.]
@@ -93,8 +93,11 @@ def change_matrix(reaction_model, species) -> np.array:
             elif 'burst' in reaction_type[row].keys() and species[column] in reaction_type[row]['burst']:
                 reactions[row][column] = 100.
 
-            elif 'dilute' in reaction_type[row].keys() and species[column] in reaction_type[row]['dilute']:
+            elif 'segregate' in reaction_type[row].keys() and species[column] in reaction_type[row]['segregate']:
                 reactions[row][column] = 5
+
+            elif 'create_mrna' in reaction_type[row].keys() and species[column] in reaction_type[row]['create_mrna']:
+                reactions[row][column] = 7
     
     return reactions
 
@@ -104,8 +107,8 @@ def setup_sim(tarr, species, cell):
     Returns a time array of the simulation with 
     default values already set.
     """
-    sim = np.zeros((len(tarr),len(species)))
-    init_state = np.array(list(species.values()))
+    sim = np.zeros((len(tarr),len(species)), dtype=np.float64)
+    init_state = np.array(list(species.values()), dtype=np.float64)
     init_state[1] = cell
     sim[0] = init_state
     return sim
@@ -143,8 +146,6 @@ def calculate_tau(p):
 
 
 def calculate_tau_for_division(p, mu, size):
-    # (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size))) if p > 0. else np.inf
-    # (1/mu) * np.log(1 - (mu/ (p * size) * np.log(np.random.rand()))) if p > 0. else np.inf
     return (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size))) if p > 0. else np.inf
 
 
@@ -200,23 +201,33 @@ def birth_size(size=1.0) -> float:
 
 def grow(mu, time, size):
     """
-
+        Makes cell grow at rate s0 * e^(mu * t)
     """
     return size * np.exp(mu * time)
 
 
-def divide(size):
-    return size / 2.
+def divide(size, noise_at_division=False) -> tuple:
+    """Returns Size, β"""
+    if noise_at_division == False:
+        β = 0.5
+        size = size / 2.
+        return size, β
+
+    elif noise_at_division == True:
+        β = np.random.beta(50, 50)
+        size = size * β
+        return  size, β
 
 
-def segregate(species, reaction_type, division_index):
+def segregate(species, reaction_type, division_index, beta):
     """Segregation"""
+    for i in range(len(species)):
+        if reaction_type[division_index][i] == 5:
+            species[i] = np.random.binomial(species[i], beta)
+    return species
 
-    species = copy(species)
-    species = [0. if species[i] < 0. else species[i] for i in range(len(species))]
-    species = [np.random.binomial(species[i] if species[i] >= 0. else 0., 0.5) if reaction_type[division_index][i] == 5 else species[i] for i in range(len(species))]
-    return np.array(species, dtype=np.float64)
 
+# Classic Gillespie
 
 def Cell(species, reactions, tmax, sampling_time, cell=1, deterministic=False):
 
@@ -252,7 +263,9 @@ def Gillespie(species, tmax, reaction_type, propensities, system, species_index,
     return species
 
 
-def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:float=0.1, cell=1, doubling_time=18):
+# Gillespie for Division Studies
+
+def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:float=0.1, cell=1, doubling_time=18, noise_at_division=False):
     # Size params setup
 
     mu = np.log(2)/doubling_time
@@ -275,60 +288,69 @@ def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:floa
     division_time = time_to_division(mu, sim[0][2])
 
     for i in range(1,len(tarr)):
-        
-        sim[i], division_time = Gillespie_for_division(sim[i - 1], tarr[i], reaction_type, propensities, reactions_species_index, mu, division_time, division_index,sampling_time)
+
+        sim[i], division_time = Gillespie_for_division(sim[i - 1], tarr[i], reaction_type, propensities, reactions_species_index, mu, division_time, division_index, noise_at_division)
         sim[i][1] = cell
+        sim[i][0] = np.float64(sim[i][0])
     return sim
 
 
-def Gillespie_for_division(species, reference_time, reaction_type, propensities, reactions_species_index, mu, division_time, division_index, sampling_time):
+def Gillespie_for_division(species, reference_time, reaction_type, propensities, reactions_species_index, mu, division_time, division_index, noise_at_division):
+    # τarr = calculate_propensities(propensities, species, reactions_species_index)
     time = 0.
-    τ = 0.
     birth_s = species[2]
-    while species[0] + τ < reference_time:
 
-        # τarr = calculate_propensities(propensities, species, reactions_species_index)
-        
-        τarr = calculate_propensities_for_division(propensities, species, reactions_species_index, mu, species[2], division_index)
-        τ,  q = minimal_value(τarr)
+    τarr = calculate_propensities_for_division(propensities, species, reactions_species_index, mu, species[2], division_index)
+    τ,  q = minimal_value(τarr)
+
+    while species[0] + τ < reference_time:     
 
         if division_time > τ:
-            species += reaction_type[q]
-            
+            species += reaction_type[q]         
             species[0] = (species[0] + τ) if (species[0] + τ) < reference_time else species[0]
             species[2] = grow(mu, τ, species[2])
             division_time -= τ
 
         elif division_time < τ:
-            species = segregate(species, reaction_type, division_index)
+            # species = segregate(species, reaction_type, division_index)
 
-            species[2] = divide(species[2])
+            species[2], β = divide(species[2], noise_at_division)
+            species = segregate(species, reaction_type, division_index, β)
+            birth_s = species[2]
             species[2] = grow(mu, division_time, species[2])
-            birth_s = deepcopy(species[2])
-
+            
             species[0] = (species[0] + division_time) if (species[0] + division_time) < reference_time else species[0]
             
             division_time = time_to_division(mu, birth_s)
 
+        τarr = calculate_propensities_for_division(propensities, species, reactions_species_index, mu, species[2], division_index)
+        τ,  q = minimal_value(τarr)
+
     time = reference_time - species[0]
-    species[2] = grow(mu, τ, species[2])
+    species[2] = grow(mu, time, species[2])
     division_time = (division_time - time) if (division_time - time) > 0. else 0.
     species[0] = reference_time
-    
 
     return species, division_time
 
 
 # Multiple Cells Simulation Types
+
 def multiple_Cells(species, reactions, tmax, sampling_time, cells=10, deterministic=False, file_name='test.csv'):
     
     set_local_to_save(file_name, species)
     for c in tqdm(range(cells)):
-        cell = []
         cell = Cell(species, reactions, tmax, sampling_time, cell=c, deterministic=deterministic)
         simple_save(cell, file_name=file_name)
-    # cells = [Cell(species, reactions, tmax, sampling_time, cell=c, deterministic=deterministic) for c in tqdm(range(cells))]
+
+
+def multiple_sims_for_division(species, reactions, tmax, sampling_time, cells=10, doubling_time=18., file_name='division_test.csv'):
     
+    set_local_to_save(file_name, species)
+    for c in tqdm(range(cells)):
+        cell = Simulate_Division(species, reactions, tmax, sampling_time, cell=c, doubling_time=doubling_time)
+        simple_save(cell, file_name=file_name)
+
 
 def multiple_cells_by_batch(species, reactions, tmax, sampling_time, samples=10, deterministic=False, batch_size=10, file_name='Toy_model'):
 
@@ -365,6 +387,7 @@ def get_mean_per_cell_division(cells=[], samples=100, tmax=100, species_idx=3, s
     if single_value == False:
         mean = np.array([np.mean([cells[sample][time:time + 1, species_idx]/cells[sample][time:time + 1, size_idx] for sample in range(samples)]) for time in range(tmax)])
         return mean
+
     elif single_value == True:
         mean = np.array([np.mean([cells[sample][time:time + 1, species_idx]/cells[sample][time:time + 1, size_idx] for sample in range(samples)]) for time in range(tmax)])
         return mean[-100:].mean() 
@@ -440,7 +463,7 @@ if __name__ == '__main__':
     }
 
     tmax = 40
-    sampling_time = 0.01
+    sampling_time = 1
     cell = 1
     sim = Simulate_Division(species, reactions, tmax, sampling_time, cell, doubling_time=18.)
     # [print(sim[i][0]) for i in range(len(sim))];
