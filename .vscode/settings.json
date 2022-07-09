@@ -1,6 +1,9 @@
 {
     "python.analysis.extraPaths": [
         "./MakerTools",
-        "./MakerTools"
+        "./MakerTools",
+        "./simulations",
+        "./simulations",
+        "./simulations"
     ]
 }

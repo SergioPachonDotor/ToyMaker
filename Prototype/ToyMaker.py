@@ -15,6 +15,8 @@ from tqdm import tqdm
 # Inspired in specific Gillespie from: https://github.com/jdmarmolejo/Propagation-of-Noise-in-Feedback-Gene-Networks/blob/main/X%20bloquea%20a%20Y%20y%20Y%20activa%20a%20X/ABloquea%20BActiva.ipynb
 # Multiprocessing solution taken from: https://analyticsindiamag.com/run-python-code-in-parallel-using-multiprocessing/
 
+
+# Common Tools
 def get_funct_get_pams(fun_dict):
     function_arr = np.zeros(len(fun_dict))
     
@@ -85,46 +87,21 @@ def change_matrix(reaction_model, species) -> np.array:
         for column in range(len(reactions[row])):
 
             if  'create' in reaction_type[row].keys() and species[column] in reaction_type[row]['create']:
-                reactions[row][column] = 1
+                reactions[row][column] = 1.
 
             elif 'destroy' in reaction_type[row].keys() and species[column] in reaction_type[row]['destroy']:
-                reactions[row][column] = -1
+                reactions[row][column] = -1.
 
             elif 'burst' in reaction_type[row].keys() and species[column] in reaction_type[row]['burst']:
                 reactions[row][column] = 100.
 
             elif 'segregate' in reaction_type[row].keys() and species[column] in reaction_type[row]['segregate']:
-                reactions[row][column] = 5
+                reactions[row][column] = 5.
 
             elif 'create_mrna' in reaction_type[row].keys() and species[column] in reaction_type[row]['create_mrna']:
-                reactions[row][column] = 7
+                reactions[row][column] = 7.
     
     return reactions
-
-
-def setup_sim(tarr, species, cell):
-    """
-    Returns a time array of the simulation with 
-    default values already set.
-    """
-    sim = np.zeros((len(tarr),len(species)), dtype=np.float64)
-    init_state = np.array(list(species.values()), dtype=np.float64)
-    init_state[1] = cell
-    sim[0] = init_state
-    return sim
-
-
-def setup_division_sim(tarr, species, cell) -> np.array:
-    """
-    Returns a time array of the simulation with 
-    default values already set.
-    """
-    sim = np.zeros((len(tarr),len(species)))
-    init_state = np.array(list(species.values()))
-    init_state[1] = cell
-    sim[0] = init_state
-
-    return sim
 
 
 def minimal_value(array):
@@ -141,12 +118,22 @@ def minimal_value(array):
     return x,  indx
 
 
+
+# Gillespie Tools
+def setup_sim(tarr, species, cell):
+    """
+    Returns a time array of the simulation with 
+    default values already set.
+    """
+    sim = np.zeros((len(tarr),len(species)), dtype=np.float64)
+    init_state = np.array(list(species.values()), dtype=np.float64)
+    init_state[1] = cell
+    sim[0] = init_state
+    return sim
+
+
 def calculate_tau(p):
     return -(1/p) * np.log(np.random.rand()) if p > 0. else np.inf
-
-
-def calculate_tau_for_division(p, mu, size):
-    return (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size))) if p > 0. else np.inf
 
 
 def calculate_propensities(propensities, species, reactions_species_index):
@@ -165,12 +152,6 @@ def calculate_propensities(propensities, species, reactions_species_index):
     return τarr
 
 
-def calculate_propensities_for_division(propensities, species, reactions_species_index, mu, size, division_index):
-    species_values = [species[reactions_species_index[i]] for i in range(len(reactions_species_index))]
-    pt = [propensities[i](*species_values[i]) for i in range(len(propensities))]
-    τarr = [calculate_tau_for_division(p, mu, size) if p > 0 else np.inf for p in pt]
-    return τarr 
-
 # system, propensities, species, species_index
 def solve_deterministic_model(system, species, species_index, system_idx):
     
@@ -185,6 +166,32 @@ def solve_deterministic_model(system, species, species_index, system_idx):
         species[system_idx[i]] = solved[i]
 
     return solved
+
+
+# Stochastic Division Tools
+
+def setup_division_sim(tarr, species, cell) -> np.array:
+    """
+    Returns a time array of the simulation with 
+    default values already set.
+    """
+    sim = np.zeros((len(tarr),len(species)))
+    init_state = np.array(list(species.values()))
+    init_state[1] = cell
+    sim[0] = init_state
+
+    return sim
+
+
+def calculate_tau_for_division(p, mu, size):
+    return (1/mu) * np.log(1 - (mu * np.log(np.random.rand())/(p * size))) if p > 0. else np.inf
+
+
+def calculate_propensities_for_division(propensities, species, reactions_species_index, mu, size, division_index):
+    species_values = [species[reactions_species_index[i]] for i in range(len(reactions_species_index))]
+    pt = [propensities[i](*species_values[i]) for i in range(len(propensities))]
+    τarr = [calculate_tau_for_division(p, mu, size) if p > 0 else np.inf for p in pt]
+    return τarr 
 
 
 def time_to_division(mu, birth_size):
@@ -227,7 +234,7 @@ def segregate(species, reaction_type, division_index, beta):
     return species
 
 
-# Classic Gillespie
+# Classic Gillespie-Nieto
 
 def Cell(species, reactions, tmax, sampling_time, cell=1, deterministic=False):
 
@@ -266,7 +273,6 @@ def Gillespie(species, tmax, reaction_type, propensities, system, species_index,
 # Gillespie for Division Studies
 
 def Simulate_Division(species:dict, reactions:dict, tmax:int, sampling_time:float=0.1, cell=1, doubling_time=18, noise_at_division=False):
-    # Size params setup
 
     mu = np.log(2)/doubling_time
 

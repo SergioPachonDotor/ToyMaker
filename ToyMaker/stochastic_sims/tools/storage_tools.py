@@ -1,5 +1,6 @@
-from tools import *
+from .common_tools import get_species_names
 import os
+import numpy as np
 import pandas as pd
 
 def set_local_to_save(filename, species):
@@ -31,3 +32,4 @@ def simple_save(cell,file_name):
     
     with open(f'{file_name}.csv', 'a') as f:
         cell.to_csv(f, index=False, header=False, mode='a')
+  

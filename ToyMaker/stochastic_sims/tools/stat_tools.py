@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def get_mean_per_cell(cells=[], samples=100, tmax=100, species_idx=2, single_value=False):
     
     if single_value == False:
@@ -9,6 +8,17 @@ def get_mean_per_cell(cells=[], samples=100, tmax=100, species_idx=2, single_val
     elif single_value == True:
         mean = np.array([np.mean([cells[sample][time:time + 1, species_idx] for sample in range(samples)]) for time in range(tmax)])
         return mean[-100:].mean()
+
+
+def get_mean_per_cell_division(cells=[], samples=100, tmax=100, species_idx=3, size_idx=2, single_value=False):
+
+    if single_value == False:
+        mean = np.array([np.mean([cells[sample][time:time + 1, species_idx]/cells[sample][time:time + 1, size_idx] for sample in range(samples)]) for time in range(tmax)])
+        return mean
+
+    elif single_value == True:
+        mean = np.array([np.mean([cells[sample][time:time + 1, species_idx]/cells[sample][time:time + 1, size_idx] for sample in range(samples)]) for time in range(tmax)])
+        return mean[-100:].mean() 
 
 
 def get_variance_per_cell(cells=[], samples=100, tmax=100, species_idx=2, single_value=False):
