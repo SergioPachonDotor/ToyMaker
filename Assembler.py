@@ -144,9 +144,5 @@ if __name__ =='__main__':
         'cells': 1000.
     }
 
-    cells = 1
-    tmax = 10
-    sampling_time = 1
-
     model = ToyModel(toy_name='My_first_model')
     model.setup(species, reactions, propensities, k_values, simulation_parameters)
