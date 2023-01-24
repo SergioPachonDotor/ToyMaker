@@ -102,3 +102,5 @@ ToyMaker uses 6 types of parameters: k_values, propensities, species, reactions 
         plt.plot(np.mean(simulation[:].T[2,:], axis=1), color='black') # Mean
         plt.xlabel('Time (a.u.)')
         plt.ylabel('RNA')
+
+![](https://github.com/SergioPachonDotor/ToyMaker/blob/main/images/example.png)
