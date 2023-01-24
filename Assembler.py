@@ -50,50 +50,24 @@ class ToyModel:
         vals = [s for s in self.propensities.values()]              # Propensities Values
         pindex = dict(zip(indx, vals))                              # Zip index, values
         #
-        propensities_to_write   = ''.join([ f'\n\t\t\t\tpropensities[{k}] = {v}'   for k,v in pindex.items()])
-        k_values_to_write       = ''.join([ f'\n\t\t{k} = {v}'                 for k,v in self.k_values.items()])
-        species_to_write        = ''.join([ f'\n\t\t\t\t{v} = species[{k}]'        for k,v in dict(enumerate(self.species.keys())).items() if k > 1])
+        propensities_to_write   = ''.join([ f'\n                propensities[{k}] = {v}'   for k,v in pindex.items()])
+        k_values_to_write       = ''.join([ f'{k}={v}, '                 for k,v in self.k_values.items()])
+        species_to_write        = ''.join([ f'\n                {v} = species[{k}]'        for k,v in dict(enumerate(self.species.keys())).items() if k > 1])
         #
-        gillespie_str= f"import numpy as np\
-                        \nfrom numba import njit\n\
-                        \n@njit\
-                        \ndef run_population(tmax={self.simulation_parameters['tmax']}, sampling_time={self.simulation_parameters['sampling_time']}, cells={int(self.simulation_parameters['cells'])}) -> np.array:\
-                        \n\tcells_arr = []\
-                        \n\tfor cell_indx in range(1, cells + 1):\
-                        \n\n\t\tspecies = np.array({list(self.species.values())}, dtype=np.float64)\
-                        \n\t\tspecies[1] = cell_indx\
-                        \n\n\t\t# Constants\
-                        \t\t{k_values_to_write}\
-                        \n\n\t\t# Reaction matrix\
-                        \n\t\treaction_type = np.array({self.reaction_matrix}, dtype=np.int64)\
-                        \n\n\t\t# Propensities initiation\
-                        \n\t\tpropensities = np.zeros({len(self.reactions.keys())}, dtype=np.float64)\
-                        \n\t\ttarr = np.arange(0, tmax,   sampling_time, dtype=np.float64)\
-                        \n\n\t\t# Simulation Space\
-                        \n\t\tsim  = np.zeros((len(tarr), len(species)), dtype=np.float64)\
-                        \n\t\tsim[0] = species\
-                        \n\n\t\tfor indx_dt in range(1, len(tarr)):\
-                        \n\t\t\tspecies = sim[indx_dt - 1]\
-                        \n\n\t\t\twhile species[0] < tarr[indx_dt]:\
-                        \n\t\t\t\t# Species\
-                        \t\t\t{species_to_write}\
-                        \n\n\t\t\t\t# Propensities\
-                        \t\t\t{propensities_to_write}\
-                        \n\n\t\t\t\tτarr = np.zeros(len(propensities), dtype=np.float64)\
-                        \n\n\t\t\t\t# Calculate tau times\
-                        \n\t\t\t\tfor indx_τ in range(len(propensities)):\
-                        \n\t\t\t\t\tif propensities[indx_τ] > 0 :\
-                        \n\t\t\t\t\t\tτarr[indx_τ] = -(1/propensities[indx_τ]) * np.log(np.random.rand())\
-                        \n\t\t\t\t\telse:\
-                        \n\t\t\t\t\t\tτarr[indx_τ] = np.inf\
-                        \n\n\t\t\t\tτ = np.min(τarr)\
-                        \n\t\t\t\tq = np.argmin(τarr)\
-                        \n\t\t\t\tspecies = species + reaction_type[q] if -1 not in species + reaction_type[q] else species\
-                        \n\t\t\t\tspecies[0] = species[0] + τ\
-                        \n\t\t\tsim[indx_dt] = species\
-                        \n\t\tcells_arr.append(sim)\
-                        \n\treturn cells_arr"
-            
+        replacements = {
+                            "tmax_value" : self.simulation_parameters['tmax'],
+                            "sampling_time_value" : self.simulation_parameters['sampling_time'],
+                            "cells_value" : self.simulation_parameters['cells'],
+                            "species_values" : list(self.species.values()),
+                            "reaction_matrix_values" : self.reaction_matrix,
+                            "reactions_keys_values" : len(list(self.reactions.keys())),
+                            "k_values_to_write": k_values_to_write,
+                            "species_to_write": species_to_write,
+                            "propensities_to_write": propensities_to_write,
+                        }
+        
+        with open("Assembler_mold.txt") as f:
+            gillespie_str = f.read().format(**replacements)
         return gillespie_str
 
     def assemble(self) -> None:
