@@ -65,8 +65,40 @@ class ToyModel:
                             "propensities_to_write": propensities_to_write,
                         }
         
-        with open(f'{os.path.abspath(__file__.replace(f"{str(os.path.basename(__file__))}", ""))}/assembler_mold.py') as f:
-            gillespie_str = f.read().format(**replacements)
+        gillespie_str = ['import numpy as np\n', 
+                         'from numba import njit\n', 
+                         '\n', 
+                         '@njit\n', 
+                         'def run_population(tmax={tmax_value}, sampling_time={sampling_time_value}, cells=int({cells_value}), {k_values_to_write}) -> list:\n', 
+                         '    cells_arr = []\n', '    for cell_indx in range(1, cells + 1):\n', 
+                         '        species = np.array({species_values}, dtype=np.float64)\n', 
+                         '        species[1] = cell_indx\n', '        # Constants\n', 
+                         '        # Reaction matrix\n', 
+                         '        reaction_type = np.array({reaction_matrix_values}, dtype=np.int64)\n', 
+                         '        # Propensities initiation\n', 
+                         '        propensities = np.zeros({reactions_keys_values}, dtype=np.float64)\n', 
+                         '        tarr = np.arange(0, tmax,   sampling_time, dtype=np.float64)\n', 
+                         '        # Simulation Space\n', '        sim  = np.zeros((len(tarr), len(species)), dtype=np.float64)\n', 
+                         '        sim[0] = species\n', '        for indx_dt in range(1, len(tarr)):\n', 
+                         '            species = sim[indx_dt - 1]\n', '            while species[0] < tarr[indx_dt]:\n', 
+                         '                # Species\n', '            {species_to_write}\n', '                # Propensities\n', 
+                         '            {propensities_to_write}\n', 
+                         '                τarr = np.zeros(len(propensities), dtype=np.float64)\n', 
+                         '                # Calculate tau times\n', 
+                         '                for indx_τ in range(len(propensities)):\n', 
+                         '                    if propensities[indx_τ] > 0 :\n', 
+                         '                        τarr[indx_τ] = -(1/propensities[indx_τ]) * np.log(np.random.rand())\n', 
+                         '                    else:\n', 
+                         '                        τarr[indx_τ] = np.inf\n', 
+                         '                τ = np.min(τarr)\n', 
+                         '                q = np.argmin(τarr)\n', 
+                         '                species = species + reaction_type[q] if τ != np.inf else species\n', 
+                         '                species[0] = species[0] + τ\n', 
+                         '            sim[indx_dt] = species\n', 
+                         '        cells_arr.append(sim)\n', 
+                         '    return cells_arr']
+        
+        gillespie_str = ''.join(gillespie_str).format(**replacements)   
         return gillespie_str
 
     def assemble(self) -> None:
