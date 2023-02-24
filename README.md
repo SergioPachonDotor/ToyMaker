@@ -111,4 +111,4 @@ ToyMaker uses 6 types of parameters: k_values, propensities, species, reactions 
         plt.xlabel('Time (a.u.)')
         plt.ylabel('RNA')
 
-![](https://github.com/SergioPachonDotor/ToyMaker/blob/main/images/example.png)
+![](https://github.com/SergioPachonDotor/ToyMaker/blob/main/ToyMaker/images/example.png)
