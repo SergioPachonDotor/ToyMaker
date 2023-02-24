@@ -66,7 +66,7 @@ class ToyModel:
                             "propensities_to_write": propensities_to_write,
                         }
         
-        with open("Assembler_mold.txt") as f:
+        with open("./molds/Assembler_mold.txt") as f:
             gillespie_str = f.read().format(**replacements)
         return gillespie_str
 
