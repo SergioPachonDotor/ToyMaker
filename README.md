@@ -1,6 +1,12 @@
 # ToyMaker 🤖
 
-This library is designed to facilitate research of stochasticity effects in genetic circuits. 
+This library is designed to facilitate research of stochasticity effects in genetic circuits.
+
+## Installation
+
+ToyMaker can be installed using pip:
+
+        pip install ToyMaker
 
 ## Usage:
 
@@ -38,6 +44,8 @@ ToyMaker uses 6 types of parameters: k_values, propensities, species, reactions 
     Finally, you can use your generated file in a Jupyter Notebook.
  
  - ### Example: 
+
+        from ToyMaker.Assembler import ToyModel
 
         k_values = {
                     'kr' : 5,

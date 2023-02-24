@@ -1,4 +1,3 @@
-import numpy as np
 import os
 
 class ToyModel:
@@ -42,21 +41,7 @@ class ToyModel:
         self.simulation_parameters.update(simulation_parameters)
         self.add_change_matrix()   
         self.create_gillespie_string()
-        self.assemble()
-     
-    # def create_gillespie_molds(self) -> None:
-        
-    #     gillespie_mold = ""
-        
-    #     if os.path.exists(f'{__file__}/molds/'):
-    #         pass
-
-    #     else:
-    #         os.mkdir('./modls/')
-            
-    #     with open(f'{__file__}/.assembler_mold.py') as f:
-    #         gillespie_str = f.read().format(**replacements)
-    #     return gillespie_str        
+        self.assemble()   
         
     def create_gillespie_string(self) -> str:
         #
@@ -87,13 +72,13 @@ class ToyModel:
     def assemble(self) -> None:
         data = self.create_gillespie_string()
 
-        if os.path.exists('./results/'):
+        if os.path.exists('./output/'):
             pass
 
         else:
-            os.mkdir('./results/')
+            os.mkdir('./output/')
             
-        with open(f'./results/{self.toy_name}.py', 'w') as f:
+        with open(f'./output/{self.toy_name}.py', 'w') as f:
             f.writelines(
                 f"{data}")
 
