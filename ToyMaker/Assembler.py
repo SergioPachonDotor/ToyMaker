@@ -43,6 +43,20 @@ class ToyModel:
         self.add_change_matrix()   
         self.create_gillespie_string()
         self.assemble()
+     
+    # def create_gillespie_molds(self) -> None:
+        
+    #     gillespie_mold = ""
+        
+    #     if os.path.exists(f'{__file__}/molds/'):
+    #         pass
+
+    #     else:
+    #         os.mkdir('./modls/')
+            
+    #     with open(f'{__file__}/.assembler_mold.py') as f:
+    #         gillespie_str = f.read().format(**replacements)
+    #     return gillespie_str        
         
     def create_gillespie_string(self) -> str:
         #
@@ -66,7 +80,7 @@ class ToyModel:
                             "propensities_to_write": propensities_to_write,
                         }
         
-        with open("./molds/Assembler_mold.txt") as f:
+        with open(f'{os.path.abspath(__file__.replace(f"{str(os.path.basename(__file__))}", ""))}/.assembler_mold.py') as f:
             gillespie_str = f.read().format(**replacements)
         return gillespie_str
 
