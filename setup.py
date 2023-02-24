@@ -8,7 +8,7 @@ setup(
   author = 'Sergio Andrés Pachón Dotor',
   author_email = 'sap9827@gmail.com',
   url = 'https://github.com/SergioPachonDotor',
-  download_url = 'https://github.com/SergioPachonDotor/ToyMaker/archive/refs/tags/0.2.2.tar.gz',
+  download_url = 'https://github.com/SergioPachonDotor/ToyMaker/archive/refs/tags/v0.2.2.tar.gz',
   keywords = ['Stochastic process', 'Genetic circuits', 'Simulation', 'Synthetic Biology', 'Systems Biology'],
   install_requires=[     
           'numpy',
