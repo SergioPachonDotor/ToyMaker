@@ -103,37 +103,10 @@ class ToyModel:
 
     def assemble(self) -> None:
         data = self.create_gillespie_string()
-
-        if os.path.exists('./output/'):
-            pass
-
-        else:
-            os.mkdir('./output/')
         
-        with open(f'./output/{self.toy_name}.py', 'w') as f:
-            f.writelines(
-                f"{data}")
+        with open(f'./{self.toy_name}.py', 'w') as f:
+            f.writelines(f"{data}")
         
-        if os.path.exists('./output/__init__.py'):
-            with open('./output/__init__.py', 'r') as f:
-                lines = f.readlines()
-                f.close()
-                new_to_import = f"from {self.toy_name} import *"
-                line_in_file = False
-                
-                for line in lines:
-                    line_in_file = True if line == new_to_import else False
-                
-                if line_in_file == True:
-                    pass
-                else:
-                    with open('./output/__init__.py', 'a') as f:
-                        f.write(f'\nfrom {self.toy_name} import *')
-            
-        else:
-            with open('./output/__init__.py', 'w') as f:
-                f.write(f'from {self.toy_name} import *')
-
 if __name__ =='__main__':
     
     k_values = {
