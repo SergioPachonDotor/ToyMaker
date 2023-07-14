@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
   name = 'ToyMaker',         
   packages = ['ToyMaker'],
-  version = '0.2.4',  
+  version = '0.2.5',  
   license='MIT',    
   description = 'This library is designed to facilitate research of stochasticity effects in genetic circuits',
   author = 'Sergio Andrés Pachón Dotor',
@@ -23,5 +23,6 @@ setup(
     'Programming Language :: Python :: 3.8', 
     'Programming Language :: Python :: 3.9', 
     'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
   ],
 )
